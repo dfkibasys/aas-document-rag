@@ -1,257 +1,359 @@
 networks:
-  basyx:
-    driver: bridge
-  kafka:
-    driver: bridge
-  kafka-connect:
-    driver: bridge
-  mongo:
-    driver: bridge
+    basyx:
+        driver: bridge
+    kafka:
+        driver: bridge
+    kafka-connect:
+        driver: bridge
+    mongo:
+        driver: bridge
+    embedding:
+        driver: bridge
 
 services:
+    ########### Kafka ###################################################################
 
-########### Kafka ###################################################################
+    kafka:
+        image: confluentinc/cp-kafka:${KAFKA_VERSION}
+        hostname: kafka
+        container_name: kafka
+        ports:
+            - "9093:9093"
+        environment:
+            KAFKA_ADVERTISED_LISTENERS: INTER_BROKER://kafka:9094,PLAINTEXT://kafka:9092,EXTERNAL://localhost:9093
+            KAFKA_INTER_BROKER_LISTENER_NAME: INTER_BROKER
+            KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+            KAFKA_PROCESS_ROLES: broker,controller
+            KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+            KAFKA_LISTENERS: INTER_BROKER://:9094,CONTROLLER://:9095,PLAINTEXT://:9092,EXTERNAL://:9093
+            KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTER_BROKER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+            KAFKA_BROKER_ID: 1
+            KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9095
+            ALLOW_PLAINTEXT_LISTENER: "yes"
+            KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+            CLUSTER_ID: jmpccZs2RHaYUbZ-LgaIhQ
+            KAFKA_LOG_DIRS: /var/lib/kafka/data
+            KAFKA_MIN_INSYNC_REPLICAS: 1
+            KAFKA_NUM_PARTITIONS: 1
+            KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+            KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+            KAFKA_MESSAGE_MAX_BYTES: 10485760 # 10 MB
+            KAFKA_REPLICA_FETCH_MAX_BYTES: 10485760
+            KAFKA_SOCKET_REQUEST_MAX_BYTES: 10485760
+        healthcheck:
+            test: ["CMD", "bash", "-c", "echo > /dev/tcp/kafka/9092"]
+            interval: 5s
+            timeout: 10s
+            retries: 10
+            start_period: 15s
+        networks:
+            - kafka
 
-  kafka:
-    image: confluentinc/cp-kafka:${KAFKA_VERSION}
-    hostname: kafka
-    container_name: kafka
-    ports:
-      - "9093:9093"
-    environment:
-      KAFKA_ADVERTISED_LISTENERS: INTER_BROKER://kafka:9094,PLAINTEXT://kafka:9092,EXTERNAL://localhost:9093
-      KAFKA_INTER_BROKER_LISTENER_NAME: INTER_BROKER
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENERS: INTER_BROKER://:9094,CONTROLLER://:9095,PLAINTEXT://:9092,EXTERNAL://:9093
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTER_BROKER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_BROKER_ID: 1
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9095
-      ALLOW_PLAINTEXT_LISTENER: 'yes'
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-      CLUSTER_ID: jmpccZs2RHaYUbZ-LgaIhQ
-      KAFKA_LOG_DIRS: /var/lib/kafka/data
-      KAFKA_MIN_INSYNC_REPLICAS: 1
-      KAFKA_NUM_PARTITIONS: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_MESSAGE_MAX_BYTES: 10485760          # 10 MB
-      KAFKA_REPLICA_FETCH_MAX_BYTES: 10485760
-      KAFKA_SOCKET_REQUEST_MAX_BYTES: 10485760
-    healthcheck:
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/kafka/9092"]
-      interval: 5s
-      timeout: 10s
-      retries: 10
-      start_period: 15s
-    networks:
-      - kafka
+    ########### MongoDB ###################################################################
 
-########### MongoDB ###################################################################
+    mongo:
+        image: mongo:${MONGODB_VERSION}
+        hostname: mongo
+        container_name: mongo
+        restart: always
+        environment:
+            MONGO_INITDB_ROOT_USERNAME: mongoAdmin
+            MONGO_INITDB_ROOT_PASSWORD: mongoPassword
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "mongosh",
+                    "mongodb://mongoAdmin:mongoPassword@localhost:27017/admin",
+                    "--eval",
+                    "db.adminCommand('ping')",
+                ]
+            interval: 10s
+            timeout: 5s
+            start_period: 10s
+            retries: 5
+        networks:
+            - basyx
+            - mongo
 
-  mongo:
-    image: mongo:${MONGODB_VERSION}
-    hostname: mongo
-    container_name: mongo
-    restart: always
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: mongoAdmin
-      MONGO_INITDB_ROOT_PASSWORD: mongoPassword
-    healthcheck:
-      test: ["CMD", "mongosh", "mongodb://mongoAdmin:mongoPassword@localhost:27017/admin", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      start_period: 10s
-      retries: 5
-    networks:
-      - basyx
-      - mongo
+    ########### BaSyx Components ###################################################################
 
-########### BaSyx Components ###################################################################
+    aas-registry:
+        image: eclipsebasyx/aas-registry-log-mongodb:${BASYX_V3_VERSION}
+        container_name: aas-registry
+        restart: always
+        ports:
+            - "8083:8080"
+        environment:
+            KAFKA_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+            BASYX_CORS_ALLOWED_ORIGINS: "*"
+            BASYX_CORS_ALLOWED_METHODS: GET,POST,PATCH,DELETE,PUT,OPTIONS,HEAD
+            SPRING_DATA_MONGODB_URI: ${MONGODB_URI}
+        depends_on:
+            kafka:
+                condition: service_healthy
+            mongo:
+                condition: service_healthy
+        networks:
+            - basyx
+            - kafka
+            - mongo
 
-  aas-registry:
-    image: eclipsebasyx/aas-registry-log-mongodb:${BASYX_V3_VERSION}
-    container_name: aas-registry
-    restart: always
-    ports:
-      - "8083:8080"
-    environment: 
-      KAFKA_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
-      BASYX_CORS_ALLOWED_ORIGINS: '*'
-      BASYX_CORS_ALLOWED_METHODS: GET,POST,PATCH,DELETE,PUT,OPTIONS,HEAD
-      SPRING_DATA_MONGODB_URI: ${MONGODB_URI}
-    depends_on:
-      kafka:
-        condition: service_healthy
-      mongo:
-        condition: service_healthy
-    networks:
-      - basyx
-      - kafka
-      - mongo
+    submodel-registry:
+        image: eclipsebasyx/submodel-registry-log-mongodb:${BASYX_V3_VERSION}
+        container_name: submodel-registry
+        restart: always
+        ports:
+            - "8082:8080"
+        environment:
+            KAFKA_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+            BASYX_CORS_ALLOWED_ORIGINS: "*"
+            BASYX_CORS_ALLOWED_METHODS: GET,POST,PATCH,DELETE,PUT,OPTIONS,HEAD
+            SPRING_DATA_MONGODB_URI: ${MONGODB_URI}
+        depends_on:
+            kafka:
+                condition: service_healthy
+            mongo:
+                condition: service_healthy
+        networks:
+            - basyx
+            - kafka
+            - mongo
 
-  submodel-registry:
-    image: eclipsebasyx/submodel-registry-log-mongodb:${BASYX_V3_VERSION}
-    container_name: submodel-registry
-    restart: always
-    ports:
-      - "8082:8080"
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
-      BASYX_CORS_ALLOWED_ORIGINS: '*'
-      BASYX_CORS_ALLOWED_METHODS: GET,POST,PATCH,DELETE,PUT,OPTIONS,HEAD
-      SPRING_DATA_MONGODB_URI: ${MONGODB_URI}
-    depends_on:
-      kafka:
-        condition: service_healthy
-      mongo:
-        condition: service_healthy
-    networks:
-      - basyx
-      - kafka
-      - mongo
+    aas-discovery:
+        image: eclipsebasyx/aas-discovery:${BASYX_V3_VERSION}
+        container_name: aas-discovery
+        restart: always
+        ports:
+            - "9100:8081"
+        environment:
+            BASYX_BACKEND: MongoDB
+            SPRING_DATA_MONGODB_URI: ${MONGODB_URI}
+            SPRING_DATA_MONGODB_DATABASE: aas-env
+            BASYX_CORS_ALLOWED_ORIGINS: "*"
+            BASYX_CORS_ALLOWED_METHODS: GET,POST,PATCH,DELETE,PUT,OPTIONS,HEAD
+        depends_on:
+            mongo:
+                condition: service_healthy
+        networks:
+            - basyx
+            - mongo
 
-  aas-discovery:
-    image: eclipsebasyx/aas-discovery:${BASYX_V3_VERSION}
-    container_name: aas-discovery
-    restart: always
-    ports:
-      - "9100:8081"
-    environment:
-      BASYX_BACKEND: MongoDB
-      SPRING_DATA_MONGODB_URI: ${MONGODB_URI}
-      SPRING_DATA_MONGODB_DATABASE: aas-env
-      BASYX_CORS_ALLOWED_ORIGINS: '*'
-      BASYX_CORS_ALLOWED_METHODS: GET,POST,PATCH,DELETE,PUT,OPTIONS,HEAD
-    depends_on:
-      mongo:
-        condition: service_healthy
-    networks:
-      - basyx
-      - mongo
+    aas-environment:
+        image: eclipsebasyx/aas-environment:${BASYX_V3_VERSION}
+        container_name: aas-environment
+        restart: always
+        ports:
+            - "8081:8081"
+        environment:
+            BASYX_BACKEND: MongoDB
+            SPRING_DATA_MONGODB_URI: ${MONGODB_URI}
+            SPRING_DATA_MONGODB_DATABASE: aas-env
+            BASYX_FEATURE_KAFKA_ENABLED: true
+            BASYX_AASREPOSITORY_FEATURE_DISCOVERYINTEGRATION: http://aas-discovery:8081
+            SPRING_KAFKA_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+            BASYX_AASREPOSITORY_FEATURE_REGISTRYINTEGRATION: http://aas-registry:8080
+            BASYX_SUBMODELREPOSITORY_FEATURE_REGISTRYINTEGRATION: http://submodel-registry:8080
+            BASYX_AASREPOSITORY_FEATURE_AASXUPLOAD_ENABLED: "true"
+            BASYX_CORS_ALLOWED_ORIGINS: "*"
+            BASYX_ENVIRONMENT: file:/application/files/aasx/
+            BASYX_CORS_ALLOWED_METHODS: GET,POST,PATCH,DELETE,PUT,OPTIONS,HEAD
+            BASYX_EXTERNALURL: http://localhost:8081,http://aas-environment:8081,http://host.docker.internal:8081
+            SPRING_KAFKA_PRODUCER_PROPERTIES_MAX_REQUEST_SIZE: 10485760
+        volumes:
+            - ./aasx/:/application/files/aasx/
+        depends_on:
+            kafka:
+                condition: service_healthy
+            mongo:
+                condition: service_healthy
+            aas-registry:
+                condition: service_healthy
+            submodel-registry:
+                condition: service_healthy
+            aas-discovery:
+                condition: service_healthy
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "curl",
+                    "--fail",
+                    "http://localhost:8081/actuator/health",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 5
+            start_period: 3600s
+        networks:
+            - basyx
+            - kafka
+            - mongo
 
-  aas-environment:
-    image: eclipsebasyx/aas-environment:${BASYX_V3_VERSION}
-    container_name: aas-environment
-    restart: always
-    ports:
-      - "8081:8081"
-    environment:
-      BASYX_BACKEND: MongoDB
-      SPRING_DATA_MONGODB_URI: ${MONGODB_URI}
-      SPRING_DATA_MONGODB_DATABASE: aas-env
-      BASYX_FEATURE_KAFKA_ENABLED: true
-      BASYX_AASREPOSITORY_FEATURE_DISCOVERYINTEGRATION: http://aas-discovery:8081
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
-      BASYX_AASREPOSITORY_FEATURE_REGISTRYINTEGRATION: http://aas-registry:8080
-      BASYX_SUBMODELREPOSITORY_FEATURE_REGISTRYINTEGRATION: http://submodel-registry:8080
-      BASYX_AASREPOSITORY_FEATURE_AASXUPLOAD_ENABLED: "true"   
-      BASYX_CORS_ALLOWED_ORIGINS: '*'
-      BASYX_ENVIRONMENT: file:/application/files/aasx/
-      BASYX_CORS_ALLOWED_METHODS: GET,POST,PATCH,DELETE,PUT,OPTIONS,HEAD
-      BASYX_EXTERNALURL: http://localhost:8081,http://aas-environment:8081,http://host.docker.internal:8081
-      SPRING_KAFKA_PRODUCER_PROPERTIES_MAX_REQUEST_SIZE: 10485760
-    volumes: 
-      - ./aasx/:/application/files/aasx/
-    depends_on:
-      kafka:
-        condition: service_healthy
-      mongo:
-        condition: service_healthy
-      aas-registry:
-        condition: service_healthy
-      submodel-registry:
-        condition: service_healthy
-      aas-discovery:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8081/actuator/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 3600s  
-    networks:
-      - basyx
-      - kafka
-      - mongo
+    ########### Kafka Connect (FileStreamSink) ###########################################################
 
-########### Kafka Connect (FileStreamSink) ###########################################################
+    kafka-connect-rag:
+        image: aas-document-rag-kafka-connect:${KAFKA_VERSION}
+        container_name: kafka-connect-rag
+        build:
+            context: kafka-connect
+        pull_policy: never
+        ports:
+            - "8085:8083"
+        environment:
+            CONNECT_BOOTSTRAP_SERVERS: "kafka:9092"
+            CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect"
+            CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect=INFO"
+            BASYX_AAS_REPO_URL: http://aas-environment:8081
+            BASYX_SM_REPO_URL: http://aas-environment:8081
+        networks:
+            - kafka
+            - kafka-connect
+        depends_on:
+            kafka:
+                condition: service_healthy
+            aas-environment:
+                condition: service_healthy
+        volumes:
+            - ./kafka-connect/config/file-sink-connector.json:/etc/kafka-connect/config/file-sink-connector.json
+            - ./kafka-connect/scripts/entrypoint.sh:/etc/basyx/entrypoint.sh
+            - ./logs:/tmp/kafka-logs
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8083/"]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 60s
 
-  kafka-connect-rag:
-    image: aas-document-rag-kafka-connect:${KAFKA_VERSION}
-    container_name: kafka-connect-rag
-    build:
-      context: kafka-connect
-    pull_policy: never
-    ports:
-      - "8085:8083"
-    environment: 
-      CONNECT_BOOTSTRAP_SERVERS: "kafka:9092"     
-      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect"            
-      CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect=INFO"    
-      BASYX_AAS_REPO_URL: http://aas-environment:8081
-      BASYX_SM_REPO_URL: http://aas-environment:8081
-    networks:
-      - kafka
-      - kafka-connect
-    depends_on:
-      kafka: 
-        condition: service_healthy
-      aas-environment:
-        condition: service_healthy
-    volumes:
-      - ./kafka-connect/config/file-sink-connector.json:/etc/kafka-connect/config/file-sink-connector.json
-      - ./kafka-connect/scripts/entrypoint.sh:/etc/basyx/entrypoint.sh
-      - ./logs:/tmp/kafka-logs
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+    ########### Management UIs ###################################################################
 
-########### Management UIs ###################################################################
+    akhq:
+        image: tchiotludo/akhq:${AKHQ_VERSION}
+        container_name: akhq
+        restart: always
+        ports:
+            - "8086:8080"
+        environment:
+            AKHQ_CONFIGURATION: |
+                akhq:
+                  connections:
+                    docker-kafka-server:
+                      properties:
+                        bootstrap.servers: "kafka:9092"
+        depends_on:
+            kafka:
+                condition: service_healthy
+        networks:
+            - kafka
 
-  akhq:
-    image: tchiotludo/akhq:${AKHQ_VERSION}
-    container_name: akhq
-    restart: always
-    ports:
-      - "8086:8080"
-    environment:
-      AKHQ_CONFIGURATION: |
-        akhq:
-          connections:
-            docker-kafka-server:
-              properties:
-                bootstrap.servers: "kafka:9092"
-    depends_on:
-      kafka:
-        condition: service_healthy
-    networks:
-      - kafka
+    aas-gui:
+        image: eclipsebasyx/aas-gui:${AAS_WEBUI_VERSION}
+        container_name: aas-gui
+        restart: always
+        ports:
+            - "8099:3000"
+        environment:
+            CHOKIDAR_USEPOLLING: "true"
+            AAS_DISCOVERY_PATH: http://localhost:9100
+            AAS_REGISTRY_PATH: http://localhost:8083
+            SUBMODEL_REGISTRY_PATH: http://localhost:8082
+            AAS_REPO_PATH: http://localhost:8081/shells
+            SUBMODEL_REPO_PATH: http://localhost:8081/submodels
+            CD_REPO_PATH: http://localhost:8081/concept-descriptions
+        depends_on:
+            aas-registry:
+                condition: service_healthy
+            submodel-registry:
+                condition: service_healthy
+            aas-environment:
+                condition: service_healthy
+        networks:
+            - basyx
 
-  aas-gui:
-    image: eclipsebasyx/aas-gui:${AAS_WEBUI_VERSION}
-    container_name: aas-gui
-    restart: always
-    ports:
-      - "8099:3000"
-    environment:
-      CHOKIDAR_USEPOLLING: "true"
-      AAS_DISCOVERY_PATH: http://localhost:9100
-      AAS_REGISTRY_PATH: http://localhost:8083
-      SUBMODEL_REGISTRY_PATH: http://localhost:8082
-      AAS_REPO_PATH: http://localhost:8081/shells
-      SUBMODEL_REPO_PATH: http://localhost:8081/submodels
-      CD_REPO_PATH: http://localhost:8081/concept-descriptions
-    depends_on:
-      aas-registry:
-        condition: service_healthy
-      submodel-registry:
-        condition: service_healthy    
-      aas-environment:
-        condition: service_healthy
-    networks:
-      - basyx
+    ########### Embedding Service ###################################################################
+
+    embedding-service:
+        build: ./embedding-service
+        container_name: embedding-service
+        ports:
+            - "8000:8000"
+        environment:
+            - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+            - WEAVIATE_HOST=weaviate
+        networks:
+            - embedding
+            - kafka-connect
+        depends_on:
+            - weaviate
+        deploy:
+            resources:
+                limits:
+                    memory: 4096M
+                reservations:
+                    memory: 2048M
+
+    ########### Weaviate ###################################################################
+
+    weaviate:
+        image: semitechnologies/weaviate:latest
+        restart: unless-stopped
+        container_name: weaviate
+        ports:
+            - "8070:8080"
+            - "50051:50051"
+        volumes:
+            - weaviate_content:/var/lib/weaviate
+        environment:
+            QUERY_DEFAULTS_LIMIT: 25
+            AUTHENTICATION_ANONYMOUS_ALLOWED: "true"
+            PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+            ENABLE_API_BASED_MODULES: "true"
+            CLUSTER_HOSTNAME: "node1"
+            GRPC_PORT: "50051"
+            GOMEMLIMIT: "1000MiB"
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "curl",
+                    "-f",
+                    "http://localhost:8080/v1/.well-known/ready",
+                ]
+            interval: 5s
+            timeout: 10s
+            retries: 5
+        networks:
+            - embedding
+
+    ########### Flowise ###################################################################
+
+    flowise-ai:
+        image: flowiseai/flowise
+        container_name: flowise-ai
+        ports:
+            - "3000:3000"
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
+        volumes:
+            - flowise_volume:/app/data
+        env_file:
+            - .env.flowise
+        networks:
+            - embedding
+        depends_on:
+            - weaviate
+        restart: unless-stopped
+        environment:
+            - DATABASE_PATH=/app/data/flowise.sqlite
+            - DEBUG=true
+            - LOG_LEVEL=info
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:3000/ping"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+
+volumes:
+    weaviate_content:
+    flowise_volume:

@@ -1,0 +1,12 @@
+flask
+requests 
+
+google-genai
+
+weaviate-client
+
+docling
+
+langchain-text-splitters
+langchain-core
+numpy
