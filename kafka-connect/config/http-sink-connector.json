@@ -1,0 +1,16 @@
+{
+  "name": "AasEventsHttpStreamSink",
+  "config": {
+    "connector.class": "io.aiven.kafka.connect.http.HttpSinkConnector",
+    "topics": "submodel-events,aas-events",
+    "http.url": "http://embedding-service:8000/events",
+    "http.authorization.type": "none", 
+    "http.method": "POST",
+    "http.headers": "Content-Type:application/json",
+      
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false",
+      
+    "errors.tolerance": "none"
+  }
+}

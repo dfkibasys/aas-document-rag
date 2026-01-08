@@ -104,8 +104,11 @@ def compute_embeddings_batched(texts):
 
 def ingest_from_url(url, id_s, sm_id):
     if not url or not url.startswith("http"):
+        print("checking url " + url)
+        # TODO  
+        # GET ${BASYX_SUBMODEL_REPO}/submodels/{base64_submodel_id_base64url_encoded}/submodel-elements/{idShortPath}/attachment
         return
-    
+    # else
     raw_name = url.split('/')[-1].split('?')[0]
     fname = f"{secure_filename(sm_id)}_{secure_filename(id_s)}_{secure_filename(raw_name)}"
     if not fname.lower().endswith('.pdf'):

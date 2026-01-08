@@ -193,7 +193,7 @@ services:
     ########### Kafka Connect (FileStreamSink) ###########################################################
 
     kafka-connect-rag:
-        image: aas-document-rag-kafka-connect:${KAFKA_VERSION}
+        image: aas-document-rag-kafka-connect:${KAFKA_VERSION}-${RAG_CONNECT_VERSION}
         container_name: kafka-connect-rag
         build:
             context: kafka-connect
@@ -280,6 +280,10 @@ services:
         environment:
             - GOOGLE_API_KEY=${GOOGLE_API_KEY}
             - WEAVIATE_HOST=weaviate
+
+            #  GET ${BASYX_SUBMODEL_REPO}/submodels/{base64_submodel_id_base64url_encoded}/submodel-elements/{idShortPath}/attachment
+  
+            - BASYX_SUBMODEL_REPO=http://aas-environment:8081
         networks:
             - embedding
             - kafka-connect

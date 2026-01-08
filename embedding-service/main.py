@@ -4,7 +4,7 @@ from embedding import handle_create, handle_update, handle_delete
 
 app = Flask(__name__)
 
-@app.route('/event', methods=['POST'])
+@app.route('/events', methods=['POST'])
 def handle_aas_event():
     event = request.get_json()
     if not event:

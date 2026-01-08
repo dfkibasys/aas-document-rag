@@ -8,10 +8,10 @@ until curl -sf http://localhost:8083/connectors > /dev/null; do
   sleep 3
 done
 
-echo "Kafka Connect started, deploying FileStreamSink connector..."
+echo "Kafka Connect started, deploying HttpStreamSink connector..."
 
-CONNECTOR_NAME="AasEventsFileStreamSink"
-CONNECTOR_CONFIG_PATH="/etc/kafka-connect/config/file-sink-connector.json"
+CONNECTOR_NAME="AasEventsHttpStreamSink"
+CONNECTOR_CONFIG_PATH="/etc/kafka-connect/config/http-sink-connector.json"
 CONNECTOR_URL="http://localhost:8083/connectors/$CONNECTOR_NAME/config"
 
 if curl -s -o /dev/null -w "%{http_code}" "$CONNECTOR_URL" | grep -q "200"; then
