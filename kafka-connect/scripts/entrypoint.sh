@@ -8,18 +8,22 @@ until curl -sf http://localhost:8083/connectors > /dev/null; do
   sleep 3
 done
 
-echo "Kafka Connect started, deploying HttpStreamSink connector..."
+echo "Kafka Connect started, deploying HTTP Sink connector..."
 
 CONNECTOR_NAME="AasEventsHttpStreamSink"
 CONNECTOR_CONFIG_PATH="/etc/kafka-connect/config/http-sink-connector.json"
 CONNECTOR_URL="http://localhost:8083/connectors/$CONNECTOR_NAME/config"
 
+# Extract just the config part for CREATE (Kafka Connect REST API quirk)
+CONFIG_ONLY=$(cat "$CONNECTOR_CONFIG_PATH" | jq '.config')
+
 if curl -s -o /dev/null -w "%{http_code}" "$CONNECTOR_URL" | grep -q "200"; then
   echo "Updating existing connector: $CONNECTOR_NAME"
-  RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "Content-Type: application/json" --data @"$CONNECTOR_CONFIG_PATH" "$CONNECTOR_URL")
+  RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "Content-Type: application/json" -d "$CONFIG_ONLY" "$CONNECTOR_URL")
 else
   echo "Creating new connector: $CONNECTOR_NAME"
-  RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" --data @"$CONNECTOR_CONFIG_PATH" http://localhost:8083/connectors)
+  # For CREATE, send the whole object with name + config
+  RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d @"$CONNECTOR_CONFIG_PATH" http://localhost:8083/connectors)
 fi
 
 if [ "$RESPONSE_CODE" -lt 200 ] || [ "$RESPONSE_CODE" -ge 300 ]; then

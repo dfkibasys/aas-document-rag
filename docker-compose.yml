@@ -55,7 +55,7 @@ services:
         image: mongo:${MONGODB_VERSION}
         hostname: mongo
         container_name: mongo
-        restart: always
+        restart: unless-stopped
         environment:
             MONGO_INITDB_ROOT_USERNAME: mongoAdmin
             MONGO_INITDB_ROOT_PASSWORD: mongoPassword
@@ -81,7 +81,7 @@ services:
     aas-registry:
         image: eclipsebasyx/aas-registry-log-mongodb:${BASYX_V3_VERSION}
         container_name: aas-registry
-        restart: always
+        restart: unless-stopped
         ports:
             - "8083:8080"
         environment:
@@ -102,7 +102,7 @@ services:
     submodel-registry:
         image: eclipsebasyx/submodel-registry-log-mongodb:${BASYX_V3_VERSION}
         container_name: submodel-registry
-        restart: always
+        restart: unless-stopped
         ports:
             - "8082:8080"
         environment:
@@ -123,7 +123,7 @@ services:
     aas-discovery:
         image: eclipsebasyx/aas-discovery:${BASYX_V3_VERSION}
         container_name: aas-discovery
-        restart: always
+        restart: unless-stopped
         ports:
             - "9100:8081"
         environment:
@@ -142,7 +142,7 @@ services:
     aas-environment:
         image: eclipsebasyx/aas-environment:${BASYX_V3_VERSION}
         container_name: aas-environment
-        restart: always
+        restart: unless-stopped
         ports:
             - "8081:8081"
         environment:
@@ -215,7 +215,7 @@ services:
             aas-environment:
                 condition: service_healthy
         volumes:
-            - ./kafka-connect/config/file-sink-connector.json:/etc/kafka-connect/config/file-sink-connector.json
+            - ./kafka-connect/config/http-sink-connector.json:/etc/kafka-connect/config/http-sink-connector.json
             - ./kafka-connect/scripts/entrypoint.sh:/etc/basyx/entrypoint.sh
             - ./logs:/tmp/kafka-logs
         healthcheck:
@@ -230,7 +230,7 @@ services:
     akhq:
         image: tchiotludo/akhq:${AKHQ_VERSION}
         container_name: akhq
-        restart: always
+        restart: unless-stopped
         ports:
             - "8086:8080"
         environment:
@@ -249,7 +249,7 @@ services:
     aas-gui:
         image: eclipsebasyx/aas-gui:${AAS_WEBUI_VERSION}
         container_name: aas-gui
-        restart: always
+        restart: unless-stopped
         ports:
             - "8099:3000"
         environment:

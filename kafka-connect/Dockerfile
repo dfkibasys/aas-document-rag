@@ -1,36 +1,24 @@
-# FROM confluentinc/cp-kafka-connect:7.9.1 AS download
 
-# USER root
-
-# # Download FileStreamSink connector JAR from Maven Central
-# RUN curl -L -o /tmp/connect-file.jar \
-#     https://repo1.maven.org/maven2/org/apache/kafka/connect-file/3.6.0/connect-file-3.6.0.jar
-# Stage 1: Download und Entpacken
 FROM alpine:latest AS download
 USER root
-# Installiere curl und unzip
 RUN apk add --no-cache curl unzip
 
-# Download der spezifischen Version von GitHub
 RUN curl -L -o /tmp/connector.zip \
     https://github.com/Aiven-Open/http-connector-for-apache-kafka/releases/download/v0.9.0/http-connector-for-apache-kafka-0.9.0.zip
 
-# Entpacken in einen temporären Ordner
 RUN unzip /tmp/connector.zip -d /tmp/connector-extracted
 
-# Stage 2: Finales Image
 FROM confluentinc/cp-kafka-connect:7.9.1
 
 USER root
 
-# Erstelle den Zielordner für das Plugin
 RUN mkdir -p /usr/share/java/kafka-connect-http
 
 # Kopiere den Inhalt des entpackten ZIPs (die Jars) in den Plugin-Ordner
 # Das Release-Zip enthält meist einen Unterordner, daher nehmen wir den Inhalt daraus
 COPY --from=download /tmp/connector-extracted/http-connector-for-apache-kafka-0.9.0/ /usr/share/java/kafka-connect-http/
 
-# Copy entrypoint script
+COPY config/http-sink-connector.json /etc/kafka-connect/config/http-sink-connector.json
 COPY scripts/entrypoint.sh /etc/basyx/entrypoint.sh
 RUN chmod +x /etc/basyx/entrypoint.sh
 
