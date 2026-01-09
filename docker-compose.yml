@@ -3,9 +3,7 @@ networks:
         driver: bridge
     kafka:
         driver: bridge
-    kafka-connect:
-        driver: bridge
-    mongo:
+    neo4j:
         driver: bridge
     embedding:
         driver: bridge
@@ -74,7 +72,6 @@ services:
             retries: 5
         networks:
             - basyx
-            - mongo
 
     ########### BaSyx Components ###################################################################
 
@@ -97,7 +94,6 @@ services:
         networks:
             - basyx
             - kafka
-            - mongo
 
     submodel-registry:
         image: eclipsebasyx/submodel-registry-log-mongodb:${BASYX_V3_VERSION}
@@ -118,7 +114,6 @@ services:
         networks:
             - basyx
             - kafka
-            - mongo
 
     aas-discovery:
         image: eclipsebasyx/aas-discovery:${BASYX_V3_VERSION}
@@ -137,7 +132,6 @@ services:
                 condition: service_healthy
         networks:
             - basyx
-            - mongo
 
     aas-environment:
         image: eclipsebasyx/aas-environment:${BASYX_V3_VERSION}
@@ -188,9 +182,8 @@ services:
         networks:
             - basyx
             - kafka
-            - mongo
 
-    ########### Kafka Connect (FileStreamSink) ###########################################################
+    ########### Kafka Connect - RAG #############################################################
 
     kafka-connect-rag:
         image: aas-document-rag-kafka-connect:${KAFKA_VERSION}-${RAG_CONNECT_VERSION}
@@ -208,7 +201,7 @@ services:
             BASYX_SM_REPO_URL: http://aas-environment:8081
         networks:
             - kafka
-            - kafka-connect
+            - embedding
         depends_on:
             kafka:
                 condition: service_healthy
@@ -224,6 +217,37 @@ services:
             timeout: 10s
             retries: 5
             start_period: 60s
+
+    ########### Kafka Connect - Neo4j ############################################################
+
+    kafka-connect-neo4j:
+        image: dfkibasys/aas-neo4j-kafka-connect-plugin:${NEO4J_CONNECT_VERSION}
+        container_name: kafka-connect-neo4j
+        ports:
+        - "8084:8083"
+        environment: 
+            CONNECT_BOOTSTRAP_SERVERS: "kafka:9092"     
+            CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect"            
+            CONNECT_LOG4J_LOGGERS: "de.dfki.cos=INFO,org.apache.kafka.connect=ERROR,org.apache.kafka.connect.runtime=WARN,io.pebbletemplates.pebble=ERROR"    
+            BASYX_AAS_REPO_URL: http://localhost:8081
+            BASYX_NEO4J_TARGET_URL: http://neo4j:7474/db/neo4j/tx/commit
+
+            CONNECT_CONSUMER_POLL_INTERVAL_MS: "100"
+            CONNECT_CONSUMER_FETCH_MAX_WAIT_MS: "50"
+            CONNECT_CONSUMER_FETCH_MIN_BYTES: "1"
+            CONNECT_CONSUMER_MAX_POLL_RECORDS: "500"
+            CONNECT_CONSUMER_OVERRIDE_SESSION_TIMEOUT:MS: "30000"
+            CONNECT_CONSUMER_OVERRIDE_MAX_POLL_INTERVAL_MS:  "600000"
+            CONNECT_CONSUMER_OVERRIDE_HEARTBEAT_INTERVAL_MS:  "3000"
+        networks:
+        - neo4j
+        - kafka
+        depends_on:
+            kafka: 
+                condition: service_started
+            neo4j: 
+                condition: service_healthy
+
 
     ########### Management UIs ###################################################################
 
@@ -270,6 +294,57 @@ services:
         networks:
             - basyx
 
+    ########### Neo4j ###################################################################
+    neo4j:
+        image: dfki-neo4j:5.28.0-community-bullseye-apoc
+        build:
+            context: neo4j
+        container_name: neo4j
+        restart: unless-stopped
+        ports:
+        - "7474:7474" # Browser interface
+        - "7687:7687" # Bolt protocol
+        environment:
+            NEO4J_AUTH: none
+            NEO4J_dbms_memory_heap_max__size: 8G
+            NEO4J_dbms_memory_pagecache_size: 4G
+        networks:
+        - neo4j
+        healthcheck:
+            test: ["CMD", "cypher-shell", "RETURN 1"] 
+            interval: 30s
+            start_period: 8s
+            timeout: 10s
+            retries: 5
+
+    ########### Neo4j MCP Service ###################################################################
+
+    neo4j-mcp-server:
+        container_name: neo4j-mcp-server
+        image: dfkibasys/mcp-neo4j-cypher:${MCP_NEO4J_VERSION}
+        restart: unless-stopped
+        ports:
+        - "8112:8000"
+        networks:
+        - neo4j
+        environment:
+            NEO4J_URI: bolt://neo4j:7687
+            NEO4J_USERNAME: neo4j
+            NEO4J_DATABASE: neo4j
+            MCP_PROXY_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-dev-stack-token-12345}
+        depends_on:
+            neo4j:
+                condition: service_healthy
+
+    mcp-inspector:
+        image: ghcr.io/modelcontextprotocol/inspector:${MCPINSPECTOR_VERSION:-latest}
+        container_name: mcp-inspector
+        restart: unless-stopped
+        network_mode: "host"
+        environment:
+            MCP_PROXY_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-dev-stack-token-12345}
+            DEBUG: true
+
     ########### Embedding Service ###################################################################
 
     embedding-service:
@@ -280,13 +355,10 @@ services:
         environment:
             - GOOGLE_API_KEY=${GOOGLE_API_KEY}
             - WEAVIATE_HOST=weaviate
-
-            #  GET ${BASYX_SUBMODEL_REPO}/submodels/{base64_submodel_id_base64url_encoded}/submodel-elements/{idShortPath}/attachment
-  
             - BASYX_SUBMODEL_REPO=http://aas-environment:8081
         networks:
             - embedding
-            - kafka-connect
+            - kafka
         depends_on:
             - weaviate
         deploy:
@@ -344,6 +416,7 @@ services:
             - .env.flowise
         networks:
             - embedding
+            - neo4j
         depends_on:
             - weaviate
         restart: unless-stopped

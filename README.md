@@ -26,23 +26,31 @@ docker-compose down --volumes
 - **Kafka AKHQ:** http://localhost:8086 (Kafka management UI)
 - **Kafka Connect RAG:** http://localhost:8085
 - **MongoDB:** Internal (AAS storage backend)
+- **Neo4j:** http://localhost:7474 (Graph database for AAS metadata)
+- **Neo4j MCP Server:** http://localhost:8112/api/mcp/ (MCP interface for Neo4j queries)
+- **MCP Inspector:** http://localhost:6274 (MCP debugging interface)
+- **Embedding Service:** http://localhost:8000 (Receives events, processes PDFs)
+- **Weaviate:** http://localhost:8070 (Vector database for embeddings)
+- **Flowise:** http://localhost:3000 (AI agent builder)
 
-**Events are logged to:** `./logs/aas-events.log`
+**Events are sent to:** `embedding-service` via HTTP Sink Connector
 
 ## Event Flow
 
 ```
 AAS Environment (CREATE/UPDATE/DELETE)
   → Kafka Topics (aas-events, submodel-events)
-  → Kafka Connect FileStreamSink
-  → ./logs/aas-events.log
+  → Kafka Connect HTTP Sink
+  → Embedding Service (Flask)
+  → PDF extraction & chunking
+  → Weaviate (Vector DB with AAS metadata)
 ```
 
 ## Working with Events
 
-**Watch logs live:**
+**View embedding service logs:**
 ```bash
-tail -f logs/aas-events.log
+docker logs -f embedding-service
 ```
 
 **View specific service logs:**
@@ -52,10 +60,10 @@ docker-compose logs -f aas-environment
 docker-compose logs -f kafka
 ```
 
-**Example events contain:**
+**Example events received by embedding-service:**
 - Submodel metadata (Identification, Signals, TechnicalData, etc.)
 - PDF references: `"value": "/aasx/MiR100-User-guide.pdf"`
-- File references for images and schemas
+- Event types: `SM_CREATED`, `SM_UPDATED`, `AAS_CREATED`, etc.
 
 ## Kafka Connect Configuration
 
@@ -64,7 +72,7 @@ docker-compose logs -f kafka
 - Good for debugging and PoC
 - Easy to trace which event causes issues
 
-**For batching** (edit `kafka-connect/config/file-sink-connector.json`):
+**For batching** (edit `kafka-connect/config/http-sink-connector.json`):
 ```json
 "consumer.override.max.poll.records": "100"
 ```
@@ -73,12 +81,12 @@ docker-compose logs -f kafka
 
 **Check connector status:**
 ```bash
-curl http://localhost:8085/connectors/AasEventsFileStreamSink/status
+curl http://localhost:8085/connectors/AasEventsHttpStreamSink/status
 ```
 
 **Restart connector:**
 ```bash
-curl -X POST http://localhost:8085/connectors/AasEventsFileStreamSink/restart
+curl -X POST http://localhost:8085/connectors/AasEventsHttpStreamSink/restart
 ```
 
 **List all connectors:**
@@ -112,15 +120,38 @@ The stack loads AASX files from `./aasx/` directory:
 docker-compose restart aas-environment
 ```
 
+## Neo4j Knowledge Graph and MCP Server
+
+The stack includes Neo4j for storing AAS metadata as a knowledge graph and an MCP (Model Context Protocol) server for querying it.
+
+**Neo4j Browser:** http://localhost:7474
+- Explore the AAS knowledge graph visually
+- Run Cypher queries directly
+- No authentication required (development setup)
+
+**MCP Inspector:** 
+```
+http://localhost:6274/?transport=http&serverUrl=http://localhost:8112/api/mcp/&MCP_PROXY_AUTH_TOKEN=dev-stack-token-12345
+```
+- Debug and test MCP server tools
+- Inspect available Neo4j query capabilities
+- Transport type: HTTP (displays as "Streamable HTTP" in UI)
+
+**Example MCP Query Workflow:**
+1. Open MCP Inspector at the URL above
+2. Use "query_neo4j" tool to find AAS ID: `MATCH (aas:Shell {idShort: 'MiR100'}) RETURN aas.id`
+3. Use returned ID to filter vector database queries in Flowise agent
+
 ## Next Steps (TODOs)
 
 ### Phase 1: RAG Pipeline (Bachelor Thesis Focus)
-- [ ] Replace FileStreamSink with HTTP Sink Connector
-- [ ] Implement Flask service to receive events via HTTP
+- [x] Replace FileStreamSink with HTTP Sink Connector ✅ DONE
+- [x] Implement Flask service to receive events via HTTP ✅ DONE
 - [ ] Extract PDF paths from events (e.g., `/aasx/MiR100-User-guide.pdf`)
-- [ ] Download and chunk PDFs using docling
+- [ ] Download PDFs from BaSyx API (`/submodels/.../submodel-elements/Documentation/attachment`)
+- [ ] Chunk PDFs using docling
 - [ ] Generate embeddings for chunks
-- [ ] Store embeddings in vector database (Qdrant/Pinecone/Chroma) with AAS metadata:
+- [ ] Store embeddings in Weaviate with AAS metadata:
   ```json
   {
     "text": "chunk content",
@@ -133,14 +164,16 @@ docker-compose restart aas-environment
   ```
 
 ### Phase 2: Agent Interface with Flowise
-- [ ] Setup Flowise (LangChain-based low-code agent builder)
-- [ ] Configure agent with two tools:
-  - **Neo4j MCP Server** (existing): Query AAS knowledge graph for metadata
-  - **VectorDB Retriever** (Flowise built-in): Search documents with metadata filtering
-- [ ] Implement two-stage retrieval via system prompt:
-  1. Query Neo4j to get AAS ID (e.g., "Find MiR100 AAS")
-  2. Query VectorDB with metadata filter: `{"aas_id": "<id-from-neo4j>"}`
-- [ ] Flowise supports **Metadata Retriever** pattern: LLM extracts metadata from user question, then applies as filter
+- [x] Setup Neo4j and MCP Server ✅ DONE
+- [x] Setup Weaviate vector database ✅ DONE
+- [ ] Setup Flowise agent builder
+- [ ] Configure Flowise agent with two data sources:
+  - **Neo4j MCP Server** (at http://localhost:8112/api/mcp/): Query AAS knowledge graph for metadata
+  - **Weaviate Retriever** (Flowise built-in): Search documents with metadata filtering
+- [ ] Implement two-stage retrieval workflow:
+  1. Query Neo4j via MCP to get AAS ID: `MATCH (aas:Shell {idShort: 'MiR100'}) RETURN aas.id`
+  2. Query Weaviate with metadata filter: `{"aas_id": "<id-from-neo4j>"}`
+- [ ] Test with MCP Inspector: http://localhost:6274/?transport=http&serverUrl=http://localhost:8112/api/mcp/&MCP_PROXY_AUTH_TOKEN=dev-stack-token-12345
 - [ ] Reference: [Flowise Multiple Documents QnA](https://docs.flowiseai.com/use-cases/multiple-documents-qna)
 
 ### Phase 3: Optimization (Future Work / Thesis Outlook)
