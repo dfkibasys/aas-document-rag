@@ -336,6 +336,28 @@ services:
             neo4j:
                 condition: service_healthy
 
+    
+    ########### Neo4j MCP Service ###################################################################
+
+    aas-weaviate-mcp:
+        image: aas-weaviate-mcp:0.0.28
+        build: ./aas-weaviate-mcp
+        container_name: aas-weaviate-mcp
+        restart: unless-stopped
+        ports:
+            - "8113:8000"
+        env_file:
+            - .env.embedding
+        environment:
+            - WEAVIATE_SCHEME=http
+            - WEAVIATE_HOST=weaviate
+            - WEAVIATE_PORT=8080
+            - WEAVIATE_GRPC_PORT=50051
+            - WEAVIATE_COLLECTION=Docs
+        networks:
+            - embedding
+            
+
     mcp-inspector:
         image: ghcr.io/modelcontextprotocol/inspector:${MCPINSPECTOR_VERSION:-latest}
         container_name: mcp-inspector
@@ -345,6 +367,7 @@ services:
             MCP_PROXY_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-dev-stack-token-12345}
             DEBUG: true
 
+
     ########### Embedding Service ###################################################################
 
     embedding-service:
@@ -352,8 +375,9 @@ services:
         container_name: embedding-service
         ports:
             - "8000:8000"
+        env_file:
+            - .env.embedding
         environment:
-            - GOOGLE_API_KEY=${GOOGLE_API_KEY}
             - WEAVIATE_HOST=weaviate
             - BASYX_SUBMODEL_REPO=http://aas-environment:8081
         networks:
