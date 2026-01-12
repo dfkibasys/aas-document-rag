@@ -4,7 +4,6 @@ logs/*.log
 
 # Docker
 .env.local
-.env.embedding
 
 # Python
 __pycache__/
