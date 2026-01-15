@@ -34,3 +34,7 @@ Thumbs.db
 /flowise-config.json
 /system-prompt.txt
 /chat.txt
+
+
+ExportDataFlowise.json
+system.prompt.txt

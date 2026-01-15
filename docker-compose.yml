@@ -1,3 +1,5 @@
+name: aas-document-rag 
+
 networks:
     basyx:
         driver: bridge
@@ -340,14 +342,14 @@ services:
     ########### Neo4j MCP Service ###################################################################
 
     aas-weaviate-mcp:
-        image: aas-weaviate-mcp:0.0.28
-        build: ./aas-weaviate-mcp
+        image: dfkibasys/aas-vector-mcp:${AAS_VECTOR_MCP_VERSION}
         container_name: aas-weaviate-mcp
         restart: unless-stopped
         ports:
             - "8113:8000"
         env_file:
             - .env.embedding
+            - ${SECRETS_PATH}
         environment:
             - WEAVIATE_SCHEME=http
             - WEAVIATE_HOST=weaviate
@@ -377,6 +379,7 @@ services:
             - "8000:8000"
         env_file:
             - .env.embedding
+            - ${SECRETS_PATH}
         environment:
             - WEAVIATE_HOST=weaviate
             - BASYX_SUBMODEL_REPO=http://aas-environment:8081
@@ -438,6 +441,7 @@ services:
             - flowise_volume:/app/data
         env_file:
             - .env.flowise
+            - ${SECRETS_PATH}
         networks:
             - embedding
             - neo4j
