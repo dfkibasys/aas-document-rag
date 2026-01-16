@@ -132,6 +132,8 @@ The stack includes Neo4j for storing AAS metadata as a knowledge graph and an MC
 **MCP Inspector:** 
 ```
 http://localhost:6274/?transport=http&serverUrl=http://localhost:8112/api/mcp/&MCP_PROXY_AUTH_TOKEN=dev-stack-token-12345
+
+http://localhost:6274/?transport=http&serverUrl=http://localhost:8113/mcp/&MCP_PROXY_AUTH_TOKEN=dev-stack-token-12345
 ```
 - Debug and test MCP server tools
 - Inspect available Neo4j query capabilities
