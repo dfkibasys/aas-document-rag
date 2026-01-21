@@ -1,12 +1,13 @@
 flask
 requests 
 
-google-genai
-
 weaviate-client
 
 docling
 
 langchain-text-splitters
 langchain-core
-numpy
+langchain-openai
+langchain-google-genai
+langchain-voyageai
+langchain-anthropic
