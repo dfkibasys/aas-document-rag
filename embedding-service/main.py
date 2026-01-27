@@ -1,4 +1,3 @@
-import threading
 from flask import Flask, request, jsonify
 from embedding import handle_create, handle_update, handle_delete
 
@@ -12,6 +11,7 @@ def handle_aas_event():
 
     event_type = str(event.get("type", "")).upper()
     
+    target_func = None
     if event_type.endswith("_CREATED"):
         target_func = handle_create
     elif event_type.endswith("_UPDATED"):
@@ -19,13 +19,14 @@ def handle_aas_event():
     elif event_type.endswith("_DELETED"):
         target_func = handle_delete
     else:
-        return jsonify({"status": "ignored", "message": f"Type {event_type} not supported"}), 200
+        return jsonify({"status": "ignored", "message": f"Type {event_type} not supported"}), 400
 
-    thread = threading.Thread(target=target_func, args=(event,))
-    thread.daemon = True
-    thread.start()
-
-    return jsonify({"status": "accepted"}), 202
+    try:
+        target_func(event)
+        return jsonify({"status": "success", "message": "Event erfolgreich verarbeitet"}), 200
+    except Exception as e:
+        app.logger.error(f"Fehler bei der Event-Verarbeitung: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": f"Fehler bei der Event-Verarbeitung: {str(e)}"}), 500
 
 @app.route('/health', methods=['GET'])
 def health():

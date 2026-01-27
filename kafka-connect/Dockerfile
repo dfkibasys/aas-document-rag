@@ -12,6 +12,8 @@ FROM confluentinc/cp-kafka-connect:7.9.1
 
 USER root
 
+RUN microdnf install -y jq && microdnf clean all
+
 RUN mkdir -p /usr/share/java/kafka-connect-http
 
 # Kopiere den Inhalt des entpackten ZIPs (die Jars) in den Plugin-Ordner
